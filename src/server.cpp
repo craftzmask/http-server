@@ -23,6 +23,7 @@ struct HttpRequest {
   std::string path;
   std::string version;
   std::unordered_map<std::string, std::string> headers;
+  std::string body;
 
   bool is_valid() const {
     return !method.empty() && !path.empty() && !version.empty();
@@ -38,6 +39,7 @@ std::string file_ok(const std::string_view file_content);
 std::string ok();
 std::string not_found();
 std::string bad_request();
+std::string created();
 
 void handle_clent(int client_fd, const std::string& filename);
 
@@ -135,13 +137,23 @@ void handle_clent(int client_fd, const std::string& filename) {
     const std::string endpoint = "/files/";
     const std::string content = trim(request.path.substr(endpoint.size())); 
     std::filesystem::path file_path(filename + "/" + content);
-    std::ifstream in(file_path);
-    if (!in.is_open()) {
-      response = not_found();
+
+    if (request.method == "POST") {
+        std::ofstream out(file_path);
+        if (out.is_open() && !request.body.empty()) {
+          out << request.body;
+          response = created();  
+        }
     } else {
-      std::ostringstream oss;
-      oss << in.rdbuf();
-      response = file_ok(oss.str());
+      std::ifstream in(file_path);
+
+      if (!in.is_open()) {
+        response = not_found();
+      } else {
+        std::ostringstream oss;
+        oss << in.rdbuf();
+        response = file_ok(oss.str());
+      }
     }
   } else {
     response = not_found();
@@ -217,6 +229,10 @@ HttpRequest parse_http(const std::string& raw_request) {
     }
   }
 
+  if (request.method == "POST" && !lines[lines.size() - 1].empty()) {
+    request.body = lines[lines.size() - 1];
+  }
+
   return request;
 }
 
@@ -246,4 +262,8 @@ std::string file_ok(const std::string_view file_content) {
     file_content.size(), 
     file_content
   );
+}
+
+std::string created() {
+  return "HTTP/1.1 201 Created\r\n\r\n";
 }
