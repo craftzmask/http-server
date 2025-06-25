@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <vector>
 #include <format>
+#include <thread>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -34,6 +35,7 @@ std::string ok();
 std::string not_found();
 std::string bad_request();
 
+void handle_clent(int client_fd);
 
 int main(int argc, char **argv) {
   // Flush after every std::cout / std::cerr
@@ -74,15 +76,32 @@ int main(int argc, char **argv) {
   int client_addr_len = sizeof(client_addr);
   
   std::cout << "Waiting for a client to connect...\n";
-  
-  const int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
-  std::cout << "Client connected\n";
 
+  while (true) {
+    const int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
+    if (client_fd < 0) {
+      std::cerr << "Failed to accept connection\n";
+      continue;
+    }
+
+    std::cout << "Client connected\n";
+    
+    std::thread t(handle_clent, client_fd);
+    t.detach(); // Allow the thread to run independently
+  }
+
+  close(server_fd);
+
+  return 0;
+}
+
+void handle_clent(int client_fd) {
   std::vector<char> buffer(BUFFER_SIZE);
   const ssize_t bytes_read = recv(client_fd, buffer.data(), buffer.size(), 0);
   if (bytes_read < 0) {
     std::cerr << "Failed to receive the request.";
-    return EXIT_FAILURE;
+    close(client_fd);
+    return;
   }
 
   const std::string raw_request(buffer.data(), bytes_read);
@@ -110,9 +129,6 @@ int main(int argc, char **argv) {
   send(client_fd, response.c_str(), response.size(), 0);
   
   close(client_fd);
-  close(server_fd);
-
-  return 0;
 }
 
 std::vector<std::string> split(const std::string& s, const std::string& delimiter) {
