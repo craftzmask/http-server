@@ -7,6 +7,9 @@
 #include <vector>
 #include <format>
 #include <thread>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -31,11 +34,12 @@ std::string trim(const std::string& s);
 HttpRequest parse_http(const std::string& raw_request);
 
 std::string ok(const std::string_view content);
+std::string file_ok(const std::string_view file_content);
 std::string ok();
 std::string not_found();
 std::string bad_request();
 
-void handle_clent(int client_fd);
+void handle_clent(int client_fd, const std::string& filename);
 
 int main(int argc, char **argv) {
   // Flush after every std::cout / std::cerr
@@ -77,6 +81,11 @@ int main(int argc, char **argv) {
   
   std::cout << "Waiting for a client to connect...\n";
 
+  std::string filename;
+  if (argc == 3 && std::string(argv[1]) == "--directory") {
+    filename = std::string_view(argv[2]);
+  }
+
   while (true) {
     const int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
     if (client_fd < 0) {
@@ -86,7 +95,7 @@ int main(int argc, char **argv) {
 
     std::cout << "Client connected\n";
     
-    std::thread t(handle_clent, client_fd);
+    std::thread t(handle_clent, client_fd, filename);
     t.detach(); // Allow the thread to run independently
   }
 
@@ -95,7 +104,7 @@ int main(int argc, char **argv) {
   return 0;
 }
 
-void handle_clent(int client_fd) {
+void handle_clent(int client_fd, const std::string& filename) {
   std::vector<char> buffer(BUFFER_SIZE);
   const ssize_t bytes_read = recv(client_fd, buffer.data(), buffer.size(), 0);
   if (bytes_read < 0) {
@@ -122,6 +131,18 @@ void handle_clent(int client_fd) {
       ? trim(request.headers["User-Agent"]) 
       : "";
     response = ok(content);
+  } else if (request.path.starts_with("/files/")) {
+    const std::string endpoint = "/files/";
+    const std::string content = trim(request.path.substr(endpoint.size())); 
+    std::filesystem::path file_path(filename + "/" + content);
+    std::ifstream in(file_path);
+    if (!in.is_open()) {
+      response = not_found();
+    } else {
+      std::ostringstream oss;
+      oss << in.rdbuf();
+      response = file_ok(oss.str());
+    }
   } else {
     response = not_found();
   }
@@ -217,4 +238,12 @@ std::string not_found() {
 
 std::string bad_request() {
   return "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n";
+}
+
+std::string file_ok(const std::string_view file_content) {
+  return std::format(
+    "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n{}", 
+    file_content.size(), 
+    file_content
+  );
 }
