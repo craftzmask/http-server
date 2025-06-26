@@ -1,6 +1,16 @@
 #include "HttpResponse.h"
 #include <format>
 
+std::string HttpResponse::ok(const std::string_view content, const std::string_view content_type, const std::string_view content_encoding) {
+  return std::format(
+    "HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Encoding: {}\r\nContent-Length: {}\r\n\r\n{}",
+    content_type,
+    content_encoding,
+    content.size(),
+    content
+  );
+}
+
 std::string HttpResponse::ok(const std::string_view content, const std::string_view content_type) {
   return std::format(
     "HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n{}",

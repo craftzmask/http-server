@@ -23,6 +23,7 @@
 #define BUFFER_SIZE 4096
 
 void handle_clent(int client_fd, const std::string& filename);
+std::string router(HttpRequest& request, const std::string& filename);
 
 int main(int argc, char **argv) {
   // Flush after every std::cout / std::cerr
@@ -99,21 +100,32 @@ void handle_clent(int client_fd, const std::string& filename) {
   const std::string raw_request(buffer.data(), bytes_read);
   HttpRequest request = HttpParser::parse_http(raw_request);
 
-  std::string response;
+  std::string response = router(request, filename);
+
+  send(client_fd, response.c_str(), response.size(), 0);
+  
+  close(client_fd);
+}
+
+std::string router(HttpRequest& request, const std::string& filename) {
   if (!request.is_valid()) {
-    response = HttpResponse::bad_request();
+    return HttpResponse::bad_request();
   } else if (request.path == "/") {
-    response = HttpResponse::ok();
+    return HttpResponse::ok();
   } else if (request.path.starts_with("/echo")) {
     const std::string endpoint = "/echo/";
     const std::string content = Util::trim(request.path.substr(endpoint.size())); 
-    response = HttpResponse::ok(content);
+    if (request.headers.contains("Accept-Encoding") && request.headers["Accept-Encoding"] == "gzip") {
+      return HttpResponse::ok(content, "text/plain", request.headers["Accept-Encoding"]);
+    } else {
+      return HttpResponse::ok(content);
+    }
   } else if (request.path == "/user-agent") {
     const std::string endpoint = "/user-agent/";
     const std::string content = request.headers.contains("User-Agent") 
       ? Util::trim(request.headers["User-Agent"]) 
       : "";
-    response = HttpResponse::ok(content);
+    return HttpResponse::ok(content);
   } else if (request.path.starts_with("/files/")) {
     const std::string endpoint = "/files/";
     const std::string content = Util::trim(request.path.substr(endpoint.size())); 
@@ -123,24 +135,19 @@ void handle_clent(int client_fd, const std::string& filename) {
         std::ofstream out(file_path);
         if (out.is_open() && !request.body.empty()) {
           out << request.body;
-          response = HttpResponse::created();  
+          return HttpResponse::created();  
         }
     } else {
       std::ifstream in(file_path);
 
       if (!in.is_open()) {
-        response = HttpResponse::not_found();
+        return HttpResponse::not_found();
       } else {
         std::ostringstream oss;
         oss << in.rdbuf();
-        response = HttpResponse::file_ok(oss.str());
+        return HttpResponse::file_ok(oss.str());
       }
     }
-  } else {
-    response = HttpResponse::not_found();
   }
-
-  send(client_fd, response.c_str(), response.size(), 0);
-  
-  close(client_fd);
+  return HttpResponse::not_found();
 }
