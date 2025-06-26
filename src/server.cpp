@@ -5,7 +5,6 @@
 #include <cstring>
 #include <unordered_map>
 #include <vector>
-#include <format>
 #include <thread>
 #include <filesystem>
 #include <fstream>
@@ -16,30 +15,12 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
+#include "HttpRequest.h"
+#include "HttpResponse.h"
+#include "HttpParser.h"
+
+#define PORT        4221
 #define BUFFER_SIZE 4096
-
-struct HttpRequest {
-  std::string method;
-  std::string path;
-  std::string version;
-  std::unordered_map<std::string, std::string> headers;
-  std::string body;
-
-  bool is_valid() const {
-    return !method.empty() && !path.empty() && !version.empty();
-  }
-};
-
-std::vector<std::string> split(const std::string& s, const std::string& delimiter);
-std::string trim(const std::string& s);
-HttpRequest parse_http(const std::string& raw_request);
-
-std::string ok(const std::string_view content);
-std::string file_ok(const std::string_view file_content);
-std::string ok();
-std::string not_found();
-std::string bad_request();
-std::string created();
 
 void handle_clent(int client_fd, const std::string& filename);
 
@@ -65,7 +46,7 @@ int main(int argc, char **argv) {
   struct sockaddr_in server_addr;
   server_addr.sin_family = AF_INET;
   server_addr.sin_addr.s_addr = INADDR_ANY;
-  server_addr.sin_port = htons(4221);
+  server_addr.sin_port = htons(PORT);
   
   if (bind(server_fd, (struct sockaddr *) &server_addr, sizeof(server_addr)) != 0) {
     std::cerr << "Failed to bind to port 4221\n";
@@ -116,154 +97,50 @@ void handle_clent(int client_fd, const std::string& filename) {
   }
 
   const std::string raw_request(buffer.data(), bytes_read);
-  HttpRequest request = parse_http(raw_request);
+  HttpRequest request = HttpParser::parse_http(raw_request);
 
   std::string response;
   if (!request.is_valid()) {
-    response = bad_request();
+    response = HttpResponse::bad_request();
   } else if (request.path == "/") {
-    response = ok();
+    response = HttpResponse::ok();
   } else if (request.path.starts_with("/echo")) {
     const std::string endpoint = "/echo/";
-    const std::string content = trim(request.path.substr(endpoint.size())); 
-    response = ok(content);
+    const std::string content = Util::trim(request.path.substr(endpoint.size())); 
+    response = HttpResponse::ok(content);
   } else if (request.path == "/user-agent") {
     const std::string endpoint = "/user-agent/";
     const std::string content = request.headers.contains("User-Agent") 
-      ? trim(request.headers["User-Agent"]) 
+      ? Util::trim(request.headers["User-Agent"]) 
       : "";
-    response = ok(content);
+    response = HttpResponse::ok(content);
   } else if (request.path.starts_with("/files/")) {
     const std::string endpoint = "/files/";
-    const std::string content = trim(request.path.substr(endpoint.size())); 
+    const std::string content = Util::trim(request.path.substr(endpoint.size())); 
     std::filesystem::path file_path(filename + "/" + content);
 
     if (request.method == "POST") {
         std::ofstream out(file_path);
         if (out.is_open() && !request.body.empty()) {
           out << request.body;
-          response = created();  
+          response = HttpResponse::created();  
         }
     } else {
       std::ifstream in(file_path);
 
       if (!in.is_open()) {
-        response = not_found();
+        response = HttpResponse::not_found();
       } else {
         std::ostringstream oss;
         oss << in.rdbuf();
-        response = file_ok(oss.str());
+        response = HttpResponse::file_ok(oss.str());
       }
     }
   } else {
-    response = not_found();
+    response = HttpResponse::not_found();
   }
 
   send(client_fd, response.c_str(), response.size(), 0);
   
   close(client_fd);
-}
-
-std::vector<std::string> split(const std::string& s, const std::string& delimiter) {
-  std::vector<std::string> tokens;
-  if (delimiter.empty()) {
-    return tokens;  
-  }
-
-  size_t start = 0;
-  size_t end = s.find(delimiter);
-
-  while (end != std::string::npos) {
-    if (start != end) {
-      tokens.push_back(s.substr(start, end - start));
-    }
-
-    start = end + delimiter.size();
-    end = s.find(delimiter, start);
-  }
-
-  if (start < s.size()) {
-    tokens.push_back(s.substr(start));
-  }
-
-  return tokens;
-}
-
-std::string trim(const std::string& s) {
-  const size_t start = s.find_first_not_of(" \t\n\r\f\v");
-  const size_t end = s.find_last_not_of(" \t\n\r\f\v");
-  
-  if (start != std::string::npos && end != std::string::npos) {
-    return s.substr(start, end - start + 1);
-  }
-
-  return "";
-}
-
-HttpRequest parse_http(const std::string& raw_request) {
-  HttpRequest request;
-
-  const auto lines = split(raw_request, "\r\n");
-  if (lines.empty()) {
-    return request;
-  }
-  
-  const auto request_line =  split(lines[0], " ");
-  if (request_line.size() != 3) {
-    std::cerr << "Malformed request line: " << lines[0] << '\n';
-    return request;
-  }
-
-  request.method = request_line[0];
-  request.path = request_line[1];
-  request.version = request_line[2];
-
-  for (int i = 1; i < lines.size(); i++) {
-    if (lines[i].find(':') != std::string::npos) {
-      const auto header = split(lines[i], ":");
-      if (header.size() == 2) {
-        const auto key= trim(header[0]);
-        const auto value = trim(header[1]);
-        request.headers[key] = trim(value);
-      }
-    }
-  }
-
-  if (request.method == "POST" && !lines[lines.size() - 1].empty()) {
-    request.body = lines[lines.size() - 1];
-  }
-
-  return request;
-}
-
-std::string ok(const std::string_view content) {
-  return std::format(
-    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}", 
-    content.size(), 
-    content
-  );
-}
-
-std::string ok() {
-  return "HTTP/1.1 200 OK\r\n\r\n";
-}
-
-std::string not_found() {
-  return "HTTP/1.1 404 Not Found\r\n\r\n";
-}
-
-std::string bad_request() {
-  return "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n";
-}
-
-std::string file_ok(const std::string_view file_content) {
-  return std::format(
-    "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n{}", 
-    file_content.size(), 
-    file_content
-  );
-}
-
-std::string created() {
-  return "HTTP/1.1 201 Created\r\n\r\n";
 }
