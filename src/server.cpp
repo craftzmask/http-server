@@ -93,21 +93,21 @@ int main(int argc, char **argv) {
 
 void handle_clent(int client_fd, const std::string& filename) {
   std::vector<char> buffer(BUFFER_SIZE);
-  const ssize_t bytes_read = recv(client_fd, buffer.data(), buffer.size(), 0);
-  if (bytes_read < 0) {
-    std::cerr << "Failed to receive the request.";
-    close(client_fd);
-    return;
-  }
+  HttpRequest request;
 
-  const std::string raw_request(buffer.data(), bytes_read);
-  HttpRequest request = HttpParser::parse_http(raw_request);
+  do {
+    const ssize_t bytes_read = recv(client_fd, buffer.data(), buffer.size(), 0);
+    if (bytes_read < 0) {
+      std::cerr << "Failed to receive the request.";
+      close(client_fd);
+      return;
+    }
 
-  const std::string response = router(request, filename);
-
-  send_all(client_fd, response.data(), response.size());
-  
-  close(client_fd);
+    const std::string raw_request(buffer.data(), bytes_read);
+    request = HttpParser::parse_http(raw_request);
+    const std::string response = router(request, filename);
+    send_all(client_fd, response.data(), response.size());
+  } while (request.version == "HTTP/1.1" || (request.headers.contains("Connection") && request.headers["Connection"] == "close"));
 }
 
 std::string router(HttpRequest& request, const std::string& filename) {
@@ -122,11 +122,11 @@ std::string router(HttpRequest& request, const std::string& filename) {
       std::vector<char> compressed = compress(content);
 
       std::ostringstream response;
-      response << "HTTP/1.1 200 OK\r\n";
-      response << "Content-Type: text/plain\r\n";
-      response << "Content-Encoding: gzip\r\n";
-      response << "Content-Length: " << compressed.size() << "\r\n";
-      response << "\r\n";
+        response << "HTTP/1.1 200 OK\r\n";
+        response << "Content-Type: text/plain\r\n";
+        response << "Content-Encoding: gzip\r\n";
+        response << "Content-Length: " << compressed.size() << "\r\n";
+        response << "\r\n";
 
       std::string header = response.str();
       std::string body(compressed.begin(), compressed.end());
@@ -163,6 +163,7 @@ std::string router(HttpRequest& request, const std::string& filename) {
       }
     }
   }
+
   return HttpResponse::not_found();
 }
 
