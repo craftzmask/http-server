@@ -14,6 +14,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <zlib.h>
 
 #include "HttpRequest.h"
 #include "HttpResponse.h"
@@ -24,6 +25,8 @@
 
 void handle_clent(int client_fd, const std::string& filename);
 std::string router(HttpRequest& request, const std::string& filename);
+std::vector<char> compress(const std::string& data);
+void send_all(int sock, const void* data, size_t size);
 
 int main(int argc, char **argv) {
   // Flush after every std::cout / std::cerr
@@ -100,9 +103,9 @@ void handle_clent(int client_fd, const std::string& filename) {
   const std::string raw_request(buffer.data(), bytes_read);
   HttpRequest request = HttpParser::parse_http(raw_request);
 
-  std::string response = router(request, filename);
+  const std::string response = router(request, filename);
 
-  send(client_fd, response.c_str(), response.size(), 0);
+  send_all(client_fd, response.data(), response.size());
   
   close(client_fd);
 }
@@ -116,7 +119,18 @@ std::string router(HttpRequest& request, const std::string& filename) {
     const std::string endpoint = "/echo/";
     const std::string content = Util::trim(request.path.substr(endpoint.size())); 
     if (request.headers.contains("Accept-Encoding") && request.headers["Accept-Encoding"] == "gzip") {
-      return HttpResponse::ok(content, "text/plain", request.headers["Accept-Encoding"]);
+      std::vector<char> compressed = compress(content);
+
+      std::ostringstream response;
+      response << "HTTP/1.1 200 OK\r\n";
+      response << "Content-Type: text/plain\r\n";
+      response << "Content-Encoding: gzip\r\n";
+      response << "Content-Length: " << compressed.size() << "\r\n";
+      response << "\r\n";
+
+      std::string header = response.str();
+      std::string body(compressed.begin(), compressed.end());
+      return header + body;
     } else {
       return HttpResponse::ok(content);
     }
@@ -150,4 +164,53 @@ std::string router(HttpRequest& request, const std::string& filename) {
     }
   }
   return HttpResponse::not_found();
+}
+
+void send_all(int sock, const void* data, size_t size) {
+    const char* ptr = static_cast<const char*>(data);
+    size_t total = 0;
+    while (total < size) {
+        ssize_t sent = send(sock, ptr + total, size - total, 0);
+        if (sent <= 0) throw std::runtime_error("send failed");
+        total += sent;
+    }
+}
+
+std::vector<char> compress(const std::string& data) {
+    z_stream strm{};
+    strm.zalloc = Z_NULL;
+    strm.zfree = Z_NULL;
+    strm.opaque = Z_NULL;
+
+    if (deflateInit2(&strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 16 + MAX_WBITS, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+        throw std::runtime_error("deflateInit2 failed");
+    }
+
+    strm.avail_in = data.size();
+    strm.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(data.data()));
+
+    std::vector<char> compressed_data;
+    const int CHUNK_SIZE = 16384;
+    std::vector<char> out_buffer(CHUNK_SIZE);
+
+    int ret;
+    do {
+        strm.avail_out = CHUNK_SIZE;
+        strm.next_out = reinterpret_cast<Bytef*>(out_buffer.data());
+
+        ret = deflate(&strm, Z_FINISH);
+        if (ret == Z_STREAM_ERROR) {
+            deflateEnd(&strm);
+            throw std::runtime_error("deflate failed");
+        }
+
+        compressed_data.insert(
+            compressed_data.end(),
+            out_buffer.begin(),
+            out_buffer.begin() + (CHUNK_SIZE - strm.avail_out)
+        );
+    } while (ret != Z_STREAM_END);
+
+    deflateEnd(&strm);
+    return compressed_data;
 }
