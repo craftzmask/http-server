@@ -29,6 +29,9 @@ struct HttpParser {
           const auto key = Util::trim(header[0]);
           const auto value = Util::trim(header[1]);
           request.headers[key] = Util::trim(value);
+          if (key == "Accept-Encoding" && value.contains("gzip")) {
+            request.headers[key] = "gzip";
+          }
         }
       }
     }
