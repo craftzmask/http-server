@@ -92,10 +92,8 @@ int main(int argc, char **argv) {
 }
 
 void handle_clent(int client_fd, const std::string& filename) {
-  std::vector<char> buffer(BUFFER_SIZE);
-  HttpRequest request;
-
-  do {
+  while (true) {
+    std::vector<char> buffer(BUFFER_SIZE);
     const ssize_t bytes_read = recv(client_fd, buffer.data(), buffer.size(), 0);
     if (bytes_read < 0) {
       std::cerr << "Failed to receive the request.";
@@ -103,14 +101,36 @@ void handle_clent(int client_fd, const std::string& filename) {
       return;
     }
 
+    if (bytes_read == 0) {
+      std::cerr << "Client closed the connection.\n";
+      close(client_fd);
+      return;
+    }
+
     const std::string raw_request(buffer.data(), bytes_read);
-    request = HttpParser::parse_http(raw_request);
-    const std::string response = router(request, filename);
+    HttpRequest request = HttpParser::parse_http(raw_request);
+    std::string response = router(request, filename);
+    bool conection_closed = request.version == "HTTP/1.0" || (request.headers.contains("Connection") && request.headers["Connection"] == "close");
+    if (conection_closed) {
+      const std::string request_line = "HTTP/1.1 200 OK\r\n";
+      response = response.substr(request_line.size());
+      response = "Connection: close\r\n" + response;
+      response = request_line + response;
+    }
+
     send_all(client_fd, response.data(), response.size());
-  } while (request.version == "HTTP/1.1" || (request.headers.contains("Connection") && request.headers["Connection"] == "close"));
+
+    if (conection_closed) {
+      close(client_fd);
+      break;
+    }
+  }
+
+  close(client_fd);
 }
 
 std::string router(HttpRequest& request, const std::string& filename) {
+  std::cout << "Router: " << request.method << " " << request.path << " " << request.version << "\n";
   if (!request.is_valid()) {
     return HttpResponse::bad_request();
   } else if (request.path == "/") {
