@@ -7,6 +7,18 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <unordered_map>
+#include <vector>
+
+struct HttpRequest {
+  std::string method;
+  std::string path;
+  std::string version;
+  std::unordered_map<std::string, std::string> headers;
+};
+
+std::vector<std::string> split_str(const std::string& s, const std::string& delimiter);
+HttpRequest parse_request(const std::string& raw_request);
 
 int main(int argc, char **argv) {
   // Flush after every std::cout / std::cerr
@@ -51,10 +63,56 @@ int main(int argc, char **argv) {
   int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
   std::cout << "Client connected\n";
   
-  std::string buffer = "HTTP/1.1 200 OK\r\n\r\n";
-  send(client_fd, buffer.c_str(), buffer.size(), 0);
+  char buf[4096];
+  ssize_t byte_read = recv(client_fd, buf, sizeof(buf), 0);
+  const std::string raw_request(buf, byte_read);
+
+  HttpRequest request = parse_request(raw_request);
+
+  std::string response;
+  if (request.path == "/") {
+    response = "HTTP/1.1 200 OK\r\n\r\n";
+  } else {
+    response = "HTTP/1.1 404 Not Found\r\n\r\n";
+  }
+
+  send(client_fd, response.c_str(), response.size(), 0);
 
   close(server_fd);
 
   return 0;
+}
+
+HttpRequest parse_request(const std::string& raw_request) {
+  HttpRequest request;
+  const std::vector<std::string> lines = split_str(raw_request, "\r\n\r\n");
+  
+  const std::vector<std::string> request_line = split_str(lines[0], " ");
+  request.method = request_line[0];
+  request.path = request_line[1];
+  request.version = request_line[2];
+
+  for (int i = 1; i < lines.size(); i++) {
+    if (lines[i].empty()) continue;
+    const std::vector<std::string> parts = split_str(lines[i], ": ");
+    request.headers[parts[0]] = parts[1];
+  }
+
+  return request;
+}
+
+std::vector<std::string> split_str(const std::string& s, const std::string& delimiter) {
+  std::vector<std::string> tokens;
+  size_t start = 0;
+  size_t end = s.find(delimiter);
+
+  while (end != std::string::npos) {
+    tokens.push_back(s.substr(start, end - start));
+    start = end + delimiter.size();
+    end = s.find(delimiter, start);
+  }
+
+  tokens.push_back(s.substr(start));
+
+  return tokens;
 }
