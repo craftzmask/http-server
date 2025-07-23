@@ -1,3 +1,4 @@
+#include <format>
 #include <iostream>
 #include <cstdlib>
 #include <string>
@@ -72,6 +73,14 @@ int main(int argc, char **argv) {
   std::string response;
   if (request.path == "/") {
     response = "HTTP/1.1 200 OK\r\n\r\n";
+  } else if (request.path.starts_with("/echo/")) {
+    const std::string path = "/echo/";
+    const std::string content = request.path.substr(path.size());
+    response = std::format(
+      "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+      content.size(),
+      content
+    );
   } else {
     response = "HTTP/1.1 404 Not Found\r\n\r\n";
   }
