@@ -81,6 +81,13 @@ int main(int argc, char **argv) {
       content.size(),
       content
     );
+  } else if (request.path == "/user-agent") {
+    const std::string content = request.headers["User-Agent"];
+    response = std::format(
+      "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+      content.size(),
+      content
+    );
   } else {
     response = "HTTP/1.1 404 Not Found\r\n\r\n";
   }
@@ -94,7 +101,7 @@ int main(int argc, char **argv) {
 
 HttpRequest parse_request(const std::string& raw_request) {
   HttpRequest request;
-  const std::vector<std::string> lines = split_str(raw_request, "\r\n\r\n");
+  const std::vector<std::string> lines = split_str(raw_request, "\r\n");
   
   const std::vector<std::string> request_line = split_str(lines[0], " ");
   request.method = request_line[0];
