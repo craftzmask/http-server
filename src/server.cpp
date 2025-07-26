@@ -10,6 +10,7 @@
 #include <netdb.h>
 #include <unordered_map>
 #include <vector>
+#include <thread>
 
 struct HttpRequest {
   std::string method;
@@ -20,6 +21,7 @@ struct HttpRequest {
 
 std::vector<std::string> split_str(const std::string& s, const std::string& delimiter);
 HttpRequest parse_request(const std::string& raw_request);
+void handle_client(int client_fd);
 
 int main(int argc, char **argv) {
   // Flush after every std::cout / std::cerr
@@ -60,39 +62,15 @@ int main(int argc, char **argv) {
   int client_addr_len = sizeof(client_addr);
   
   std::cout << "Waiting for a client to connect...\n";
-  
-  int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
-  std::cout << "Client connected\n";
-  
-  char buf[4096];
-  ssize_t byte_read = recv(client_fd, buf, sizeof(buf), 0);
-  const std::string raw_request(buf, byte_read);
 
-  HttpRequest request = parse_request(raw_request);
+  while (true) {
+    int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
+    std::cout << "Client connected\n";
 
-  std::string response;
-  if (request.path == "/") {
-    response = "HTTP/1.1 200 OK\r\n\r\n";
-  } else if (request.path.starts_with("/echo/")) {
-    const std::string path = "/echo/";
-    const std::string content = request.path.substr(path.size());
-    response = std::format(
-      "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
-      content.size(),
-      content
-    );
-  } else if (request.path == "/user-agent") {
-    const std::string content = request.headers["User-Agent"];
-    response = std::format(
-      "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
-      content.size(),
-      content
-    );
-  } else {
-    response = "HTTP/1.1 404 Not Found\r\n\r\n";
+    std::thread t(handle_client, client_fd);
+    t.detach();
   }
-
-  send(client_fd, response.c_str(), response.size(), 0);
+  
 
   close(server_fd);
 
@@ -131,4 +109,36 @@ std::vector<std::string> split_str(const std::string& s, const std::string& deli
   tokens.push_back(s.substr(start));
 
   return tokens;
+}
+
+void handle_client(int client_fd) {
+  char buf[4096];
+  ssize_t byte_read = recv(client_fd, buf, sizeof(buf), 0);
+  const std::string raw_request(buf, byte_read);
+
+  HttpRequest request = parse_request(raw_request);
+
+  std::string response;
+  if (request.path == "/") {
+    response = "HTTP/1.1 200 OK\r\n\r\n";
+  } else if (request.path.starts_with("/echo/")) {
+    const std::string path = "/echo/";
+    const std::string content = request.path.substr(path.size());
+    response = std::format(
+      "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+      content.size(),
+      content
+    );
+  } else if (request.path == "/user-agent") {
+    const std::string content = request.headers["User-Agent"];
+    response = std::format(
+      "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+      content.size(),
+      content
+    );
+  } else {
+    response = "HTTP/1.1 404 Not Found\r\n\r\n";
+  }
+
+  send(client_fd, response.c_str(), response.size(), 0);
 }
