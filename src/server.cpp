@@ -1,4 +1,5 @@
 #include <format>
+#include <fstream>
 #include <iostream>
 #include <cstdlib>
 #include <string>
@@ -11,6 +12,8 @@
 #include <unordered_map>
 #include <vector>
 #include <thread>
+#include <filesystem>
+#include <sstream>
 
 struct HttpRequest {
   std::string method;
@@ -21,7 +24,7 @@ struct HttpRequest {
 
 std::vector<std::string> split_str(const std::string& s, const std::string& delimiter);
 HttpRequest parse_request(const std::string& raw_request);
-void handle_client(int client_fd);
+void handle_client(int client_fd, const std::filesystem::path& dir_path);
 
 int main(int argc, char **argv) {
   // Flush after every std::cout / std::cerr
@@ -67,11 +70,15 @@ int main(int argc, char **argv) {
     int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
     std::cout << "Client connected\n";
 
-    std::thread t(handle_client, client_fd);
+    std::filesystem::path dir_path;
+    if (argc == 3 && std::string(argv[1]) == "--directory") {
+      dir_path = std::filesystem::path(argv[2]);
+    }
+
+    std::thread t(handle_client, client_fd, dir_path);
     t.detach();
   }
   
-
   close(server_fd);
 
   return 0;
@@ -111,7 +118,7 @@ std::vector<std::string> split_str(const std::string& s, const std::string& deli
   return tokens;
 }
 
-void handle_client(int client_fd) {
+void handle_client(int client_fd, const std::filesystem::path& dir_path) {
   char buf[4096];
   ssize_t byte_read = recv(client_fd, buf, sizeof(buf), 0);
   const std::string raw_request(buf, byte_read);
@@ -136,6 +143,24 @@ void handle_client(int client_fd) {
       content.size(),
       content
     );
+  } else if (request.path.starts_with("/files/")) {
+    const std::string path = "/files/";
+    const std::string filename = request.path.substr(path.size());
+    const std::filesystem::path full_path = dir_path / filename;
+    if (std::filesystem::exists(full_path)) {
+      std::ifstream file(full_path);
+      std::ostringstream ss;
+      ss << file.rdbuf();
+      
+      std::string content = ss.str();
+      response = std::format(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n{}",
+        content.size(),
+        content
+      );
+    } else {
+      response = "HTTP/1.1 404 Not Found\r\n\r\n";
+    }
   } else {
     response = "HTTP/1.1 404 Not Found\r\n\r\n";
   }
