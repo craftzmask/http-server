@@ -14,12 +14,14 @@
 #include <thread>
 #include <filesystem>
 #include <sstream>
+#include <fstream>
 
 struct HttpRequest {
   std::string method;
   std::string path;
   std::string version;
   std::unordered_map<std::string, std::string> headers;
+  std::string body;
 };
 
 std::vector<std::string> split_str(const std::string& s, const std::string& delimiter);
@@ -93,11 +95,15 @@ HttpRequest parse_request(const std::string& raw_request) {
   request.path = request_line[1];
   request.version = request_line[2];
 
-  for (int i = 1; i < lines.size(); i++) {
+  const int n = request.method == "POST" ? lines.size() - 1 : lines.size();
+
+  for (int i = 1; i < n; i++) {
     if (lines[i].empty()) continue;
     const std::vector<std::string> parts = split_str(lines[i], ": ");
     request.headers[parts[0]] = parts[1];
   }
+
+  request.body = lines[lines.size() - 1];
 
   return request;
 }
@@ -147,19 +153,26 @@ void handle_client(int client_fd, const std::filesystem::path& dir_path) {
     const std::string path = "/files/";
     const std::string filename = request.path.substr(path.size());
     const std::filesystem::path full_path = dir_path / filename;
-    if (std::filesystem::exists(full_path)) {
-      std::ifstream file(full_path);
-      std::ostringstream ss;
-      ss << file.rdbuf();
-      
-      std::string content = ss.str();
-      response = std::format(
-        "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n{}",
-        content.size(),
-        content
-      );
+    if (request.method == "POST") {
+      std::ofstream file(full_path, std::ios::binary);
+      file << request.body;
+      file.close();
+      response = "HTTP/1.1 201 Created\r\n\r\n";
     } else {
-      response = "HTTP/1.1 404 Not Found\r\n\r\n";
+      if (std::filesystem::exists(full_path)) {
+        std::ifstream file(full_path);
+        std::ostringstream ss;
+        ss << file.rdbuf();
+        
+        std::string content = ss.str();
+        response = std::format(
+          "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n{}",
+          content.size(),
+          content
+        );
+      } else {
+        response = "HTTP/1.1 404 Not Found\r\n\r\n";
+      }
     }
   } else {
     response = "HTTP/1.1 404 Not Found\r\n\r\n";
