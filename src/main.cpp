@@ -7,6 +7,9 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <vector>
+
+std::vector<std::string> split(const std::string& s, const std::string& deli);
 
 int main(int argc, char **argv) {
   // Flush after every std::cout / std::cerr
@@ -51,10 +54,45 @@ int main(int argc, char **argv) {
   int socket_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
   std::cout << "Client connected\n";
   
+  char buffer[2048];
+  read(socket_fd, buffer, 2048);
+
+  std::string requestString(buffer);
+  std::cout << requestString << "\n";
+
+  std::vector<std::string> parts = split(requestString, "\r\n");
+  std::string requestLine = parts[0];
+  std::vector<std::string> requestLineParts = split(requestLine, " ");
+  std::string target = requestLineParts[1];
+
   std::string msg = "HTTP/1.1 200 OK\r\n\r\n";
+  if (target != "/") {
+    msg = "HTTP/1.1 404 Not Found\r\n\r\n";
+  }
+
   write(socket_fd, msg.c_str(), msg.size());
-  
   close(server_fd);
 
   return 0;
+}
+
+std::vector<std::string> split(const std::string& s, const std::string& deli) {
+  std::vector<std::string> tokens;
+  size_t start = 0;
+  size_t end = s.find(deli);
+
+  if (deli.empty()) {
+    tokens.push_back(s);
+    return tokens;
+  }
+
+  while (end != std::string::npos) {
+    tokens.push_back(s.substr(start, end - start));
+    start = end + deli.size();
+    end = s.find(deli, start); 
+  }
+
+  tokens.push_back(s.substr(start));
+  
+  return tokens;
 }
