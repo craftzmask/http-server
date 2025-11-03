@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <vector>
+#include <format>
 
 std::vector<std::string> split(const std::string& s, const std::string& deli);
 
@@ -66,7 +67,11 @@ int main(int argc, char **argv) {
   std::string target = requestLineParts[1];
 
   std::string msg = "HTTP/1.1 200 OK\r\n\r\n";
-  if (target != "/") {
+  if (target.find("/echo") != std::string::npos) {
+    std::string path = "/echo/";
+    std::string str = target.substr(path.size());
+    msg = std::format("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}", str.size(), str);
+  } else if (target != "/") {
     msg = "HTTP/1.1 404 Not Found\r\n\r\n";
   }
 
