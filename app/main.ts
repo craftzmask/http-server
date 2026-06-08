@@ -1,20 +1,6 @@
 import * as net from "net";
-
-interface HttpRequest {
-  method: string;
-  path: string;
-  version: string;
-}
-
-const parseRequest = (data: string | Buffer): HttpRequest => {
-  const lines = data.toString().split("\r\n");
-  const [method, path, version] = lines[0].split(" ");
-  return {
-    method,
-    path,
-    version,
-  };
-};
+import { HttpResponse } from "./types";
+import { parseRequest } from "./helper";
 
 const server = net.createServer((socket) => {
   socket.on("data", (data) => {
@@ -25,9 +11,14 @@ const server = net.createServer((socket) => {
     } else if (request.path.startsWith("/echo")) {
       const content = request.path.substring("/echo/".length);
       const length = content.length;
-      socket.write(
-        `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ${length}\r\n\r\n${content}`,
-      );
+      const response = HttpResponse.Builder.setHeaders({
+        "content-type": "text/plain",
+        "content-length": String(length),
+      })
+        .setBody(content)
+
+        .build();
+      socket.write(response.toString());
     } else {
       socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
     }
