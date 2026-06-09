@@ -10,7 +10,7 @@ export class HttpResponse {
     public version: string,
     public statusCode: number,
     public statusMessage: string,
-    public headers: Record<string, string>,
+    public headers: Record<string, string | number>,
     public body?: string,
   ) {}
 
@@ -41,7 +41,7 @@ class ResponseBuilder {
   private version = "HTTP/1.1";
   private statusCode = 200;
   private statusMessage = "OK";
-  private headers: Record<string, string> = {};
+  private headers: Record<string, string | number> = {};
   private body?: string;
 
   setVersion(version: string): this {
@@ -59,7 +59,7 @@ class ResponseBuilder {
     return this;
   }
 
-  setHeaders(headers: Record<string, string>): this {
+  setHeaders(headers: Record<string, string | number>): this {
     this.headers = headers;
     return this;
   }
@@ -69,8 +69,8 @@ class ResponseBuilder {
     return this;
   }
 
-  setBody(bodyText: string): this {
-    this.body = bodyText;
+  setBody(bodyText: string | Buffer): this {
+    this.body = bodyText.toString();
     return this;
   }
 

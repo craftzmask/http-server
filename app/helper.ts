@@ -26,7 +26,7 @@ export const sendTextResponse = (socket: net.Socket, content: string): void => {
   const length = content.length;
   const response = HttpResponse.Builder.setHeaders({
     "content-type": "text/plain",
-    "content-length": String(length),
+    "content-length": length,
   })
     .setBody(content)
     .build();
