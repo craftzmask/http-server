@@ -2,6 +2,7 @@ export interface HttpRequest {
   method: string;
   path: string;
   version: string;
+  headers: Record<string, string>;
 }
 
 export class HttpResponse {
