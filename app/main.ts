@@ -4,10 +4,6 @@ import { parseRequest } from "./helper";
 import { sendTextResponse } from "./helper";
 import { HttpResponse } from "./types";
 
-// const filename = process.argv[3];
-// const content = readFileSync(filename + "foo");
-// console.log("content", content);
-
 const server = net.createServer((socket) => {
   socket.on("data", (data) => {
     const request = parseRequest(data);
