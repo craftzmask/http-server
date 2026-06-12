@@ -5,6 +5,7 @@ import {
   sendResponse,
   sendNotFoundResponse,
   sendOKResponse,
+  sendCreateResponse,
 } from "./helper";
 
 const server = net.createServer((socket) => {
@@ -16,10 +17,10 @@ const server = net.createServer((socket) => {
       sendOKResponse(socket);
     } else if (path.startsWith("/echo")) {
       const content = path.substring("/echo/".length);
-      sendResponse(socket, content);
+      sendResponse(socket, request, content);
     } else if (path.startsWith("/user-agent")) {
       const content = request.headers["user-agent"];
-      sendResponse(socket, content);
+      sendResponse(socket, request, content);
     } else if (path.startsWith("/files")) {
       const dir = process.argv[3];
       const filename = path.substring("/files/".length);
@@ -27,7 +28,7 @@ const server = net.createServer((socket) => {
 
       if (request.method === "POST") {
         writeFileSync(fullPath, request.body ?? "");
-        socket.write("HTTP/1.1 201 Created\r\n\r\n");
+        sendCreateResponse(socket);
         return;
       }
 
@@ -37,7 +38,7 @@ const server = net.createServer((socket) => {
       }
 
       const content = readFileSync(fullPath);
-      sendResponse(socket, content, "application/octet-stream");
+      sendResponse(socket, request, content, "application/octet-stream");
     } else {
       sendNotFoundResponse(socket);
     }

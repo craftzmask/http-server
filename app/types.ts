@@ -65,6 +65,13 @@ class ResponseBuilder {
     return this;
   }
 
+  setContentEncoding(contentEncoding: string): this {
+    if (contentEncoding || contentEncoding.length > 0) {
+      this.setHeader("content-encoding", contentEncoding);
+    }
+    return this;
+  }
+
   setHeaders(headers: Record<string, string | number>): this {
     this.headers = headers;
     return this;

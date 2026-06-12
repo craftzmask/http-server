@@ -2,6 +2,8 @@ import * as net from "net";
 import type { HttpRequest } from "./types";
 import { HttpResponse } from "./types";
 
+const compressionSchemes = ["gzip"];
+
 export const parseRequest = (data: string | Buffer): HttpRequest => {
   const lines = data.toString().split("\r\n");
   const [method, path, version] = lines[0].split(" ");
@@ -32,10 +34,17 @@ export const parseRequest = (data: string | Buffer): HttpRequest => {
 
 export const sendResponse = (
   socket: net.Socket,
+  request: HttpRequest,
   content: string | Buffer = "",
-  contentType = "text/plain",
+  contentType: string = "text/plain",
 ): void => {
-  const response = HttpResponse.Builder.setContentType(contentType)
+  const contentEncoding = request.headers["accept-encoding"];
+  const response = HttpResponse.Builder.setContentType(
+    contentType ? contentType : request.headers["content-type"],
+  )
+    .setContentEncoding(
+      compressionSchemes.includes(contentEncoding) ? contentEncoding : "",
+    )
     .setBody(content)
     .build();
 
@@ -50,6 +59,15 @@ export const sendNotFoundResponse = (socket: net.Socket) => {
   socket.write(
     HttpResponse.Builder.setStatusCode(404)
       .setStatusMessage("Not Found")
+      .build()
+      .toString(),
+  );
+};
+
+export const sendCreateResponse = (socket: net.Socket) => {
+  socket.write(
+    HttpResponse.Builder.setStatusCode(201)
+      .setStatusMessage("Created")
       .build()
       .toString(),
   );
