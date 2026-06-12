@@ -14,21 +14,43 @@ export const parseRequest = (data: string | Buffer): HttpRequest => {
     }
   }
 
+  // if the last line does not have semicolon,
+  // then it should be request's body
+  let body;
+  if (!lines[lines.length - 1].includes(": ")) {
+    body = lines[lines.length - 1];
+  }
+
   return {
     method,
     path,
     version,
     headers,
+    body,
   };
 };
 
-export const sendTextResponse = (socket: net.Socket, content: string): void => {
-  const length = content.length;
-  const response = HttpResponse.Builder.setHeaders({
-    "content-type": "text/plain",
-    "content-length": length,
-  })
+export const sendResponse = (
+  socket: net.Socket,
+  content: string | Buffer = "",
+  contentType = "text/plain",
+): void => {
+  const response = HttpResponse.Builder.setContentType(contentType)
     .setBody(content)
     .build();
+
   socket.write(response.toString());
+};
+
+export const sendOKResponse = (socket: net.Socket) => {
+  socket.write(HttpResponse.Builder.build().toString());
+};
+
+export const sendNotFoundResponse = (socket: net.Socket) => {
+  socket.write(
+    HttpResponse.Builder.setStatusCode(404)
+      .setStatusMessage("Not Found")
+      .build()
+      .toString(),
+  );
 };

@@ -3,6 +3,7 @@ export interface HttpRequest {
   path: string;
   version: string;
   headers: Record<string, string>;
+  body?: string;
 }
 
 export class HttpResponse {
@@ -59,18 +60,27 @@ class ResponseBuilder {
     return this;
   }
 
+  setContentType(contentType: string): this {
+    this.setHeader("content-type", contentType);
+    return this;
+  }
+
   setHeaders(headers: Record<string, string | number>): this {
     this.headers = headers;
     return this;
   }
 
-  setHeader(key: string, value: string): this {
+  setHeader(key: string, value: string | number): this {
     this.headers[key] = value;
     return this;
   }
 
   setBody(bodyText: string | Buffer): this {
-    this.body = bodyText.toString();
+    if (bodyText || bodyText.length > 0) {
+      this.body = bodyText.toString();
+      this.setHeader("content-length", this.body.length);
+    }
+
     return this;
   }
 

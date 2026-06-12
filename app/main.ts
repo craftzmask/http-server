@@ -1,8 +1,11 @@
 import * as net from "net";
-import { readFileSync, existsSync } from "fs";
-import { parseRequest } from "./helper";
-import { sendTextResponse } from "./helper";
-import { HttpResponse } from "./types";
+import { readFileSync, existsSync, writeFileSync } from "fs";
+import {
+  parseRequest,
+  sendResponse,
+  sendNotFoundResponse,
+  sendOKResponse,
+} from "./helper";
 
 const server = net.createServer((socket) => {
   socket.on("data", (data) => {
@@ -10,32 +13,33 @@ const server = net.createServer((socket) => {
 
     const path = request.path;
     if (path === "/") {
-      socket.write("HTTP/1.1 200 OK\r\n\r\n");
+      sendOKResponse(socket);
     } else if (path.startsWith("/echo")) {
       const content = path.substring("/echo/".length);
-      sendTextResponse(socket, content);
+      sendResponse(socket, content);
     } else if (path.startsWith("/user-agent")) {
       const content = request.headers["user-agent"];
-      sendTextResponse(socket, content);
+      sendResponse(socket, content);
     } else if (path.startsWith("/files")) {
       const dir = process.argv[3];
       const filename = path.substring("/files/".length);
       const fullPath = `${dir}${filename}`;
+
+      if (request.method === "POST") {
+        writeFileSync(fullPath, request.body ?? "");
+        socket.write("HTTP/1.1 201 Created\r\n\r\n");
+        return;
+      }
+
       if (!existsSync(fullPath)) {
-        socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
+        sendNotFoundResponse(socket);
         return;
       }
 
       const content = readFileSync(fullPath);
-      const response = HttpResponse.Builder.setHeaders({
-        "content-type": "application/octet-stream",
-        "content-length": content.length,
-      })
-        .setBody(content)
-        .build();
-      socket.write(response.toString());
+      sendResponse(socket, content, "application/octet-stream");
     } else {
-      socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
+      sendNotFoundResponse(socket);
     }
   });
 
