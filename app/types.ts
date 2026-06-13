@@ -61,11 +61,13 @@ class ResponseBuilder {
   }
 
   setContentType(contentType: string): this {
+    console.log("content", contentType);
     this.setHeader("content-type", contentType);
     return this;
   }
 
   setContentEncoding(contentEncoding: string): this {
+    console.log("encoding", contentEncoding);
     if (contentEncoding || contentEncoding.length > 0) {
       this.setHeader("content-encoding", contentEncoding);
     }
@@ -83,6 +85,7 @@ class ResponseBuilder {
   }
 
   setBody(bodyText: string | Buffer): this {
+    console.log("body", bodyText);
     if (bodyText || bodyText.length > 0) {
       this.body = bodyText.toString();
       this.setHeader("content-length", this.body.length);

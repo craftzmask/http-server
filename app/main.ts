@@ -38,6 +38,7 @@ const server = net.createServer((socket) => {
       }
 
       const content = readFileSync(fullPath);
+      console.log("I got here");
       sendResponse(socket, request, content, "application/octet-stream");
     } else {
       sendNotFoundResponse(socket);

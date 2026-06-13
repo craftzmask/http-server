@@ -38,17 +38,25 @@ export const sendResponse = (
   content: string | Buffer = "",
   contentType: string = "text/plain",
 ): void => {
-  const contentEncoding = request.headers["accept-encoding"];
-  const response = HttpResponse.Builder.setContentType(
-    contentType ? contentType : request.headers["content-type"],
-  )
-    .setContentEncoding(
-      compressionSchemes.includes(contentEncoding) ? contentEncoding : "",
-    )
-    .setBody(content)
-    .build();
+  try {
+    const contentEncoding = request.headers["accept-encoding"]?.split(", ");
+    const isCompressionSupported = contentEncoding?.some((encoding) =>
+      compressionSchemes.includes(encoding),
+    );
 
-  socket.write(response.toString());
+    const response = HttpResponse.Builder.setContentType(
+      request.headers["content-type"]
+        ? request.headers["content-type"]
+        : contentType,
+    )
+      .setContentEncoding(isCompressionSupported ? "gzip" : "")
+      .setBody(content)
+      .build();
+
+    socket.write(response.toString());
+  } catch {
+    sendBadRequestResponse(socket);
+  }
 };
 
 export const sendOKResponse = (socket: net.Socket) => {
@@ -68,6 +76,15 @@ export const sendCreateResponse = (socket: net.Socket) => {
   socket.write(
     HttpResponse.Builder.setStatusCode(201)
       .setStatusMessage("Created")
+      .build()
+      .toString(),
+  );
+};
+
+export const sendBadRequestResponse = (socket: net.Socket) => {
+  socket.write(
+    HttpResponse.Builder.setStatusCode(400)
+      .setStatusMessage("Bad Request")
       .build()
       .toString(),
   );
