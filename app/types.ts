@@ -12,7 +12,7 @@ export class HttpResponse {
     public statusCode: number,
     public statusMessage: string,
     public headers: Record<string, string | number>,
-    public body?: string,
+    public body?: string | Buffer,
   ) {}
 
   static get Builder() {
@@ -36,6 +36,28 @@ export class HttpResponse {
 
     return lines.join("\r\n");
   }
+
+  toBuffer(): Buffer {
+    const lines = [`${this.version} ${this.statusCode} ${this.statusMessage}`];
+    Object.entries(this.headers).forEach((header) =>
+      lines.push(`${header[0]}: ${header[1]}`),
+    );
+
+    if (this.body) {
+      lines.push("");
+      lines.push("");
+      console.log("lines", lines);
+      console.log(lines.join("\r\n"), this.body);
+      console.log(this.body);
+
+      return Buffer.concat([
+        Buffer.from(lines.join("\r\n")),
+        Buffer.from(this.body),
+      ]);
+    }
+
+    return Buffer.from(lines.join("\r\n"));
+  }
 }
 
 class ResponseBuilder {
@@ -43,7 +65,7 @@ class ResponseBuilder {
   private statusCode = 200;
   private statusMessage = "OK";
   private headers: Record<string, string | number> = {};
-  private body?: string;
+  private body?: string | Buffer;
 
   setVersion(version: string): this {
     this.version = version;
@@ -61,13 +83,11 @@ class ResponseBuilder {
   }
 
   setContentType(contentType: string): this {
-    console.log("content", contentType);
     this.setHeader("content-type", contentType);
     return this;
   }
 
   setContentEncoding(contentEncoding: string): this {
-    console.log("encoding", contentEncoding);
     if (contentEncoding || contentEncoding.length > 0) {
       this.setHeader("content-encoding", contentEncoding);
     }
@@ -84,10 +104,9 @@ class ResponseBuilder {
     return this;
   }
 
-  setBody(bodyText: string | Buffer): this {
-    console.log("body", bodyText);
+  setBody(bodyText: string | Buffer | Uint8Array): this {
     if (bodyText || bodyText.length > 0) {
-      this.body = bodyText.toString();
+      this.body = Buffer.from(bodyText);
       this.setHeader("content-length", this.body.length);
     }
 

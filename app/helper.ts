@@ -35,7 +35,7 @@ export const parseRequest = (data: string | Buffer): HttpRequest => {
 export const sendResponse = (
   socket: net.Socket,
   request: HttpRequest,
-  content: string | Buffer = "",
+  content: string | Buffer,
   contentType: string = "text/plain",
 ): void => {
   try {
@@ -50,10 +50,12 @@ export const sendResponse = (
         : contentType,
     )
       .setContentEncoding(isCompressionSupported ? "gzip" : "")
-      .setBody(content)
+      .setBody(
+        isCompressionSupported ? Bun.gzipSync(Buffer.from(content)) : content,
+      )
       .build();
 
-    socket.write(response.toString());
+    socket.write(response.toBuffer());
   } catch {
     sendBadRequestResponse(socket);
   }
