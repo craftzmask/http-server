@@ -42,6 +42,13 @@ const server = net.createServer((socket) => {
     } else {
       sendNotFoundResponse(socket);
     }
+
+    if (
+      request.headers["connection"] &&
+      request.headers["connection"] === "close"
+    ) {
+      socket.end();
+    }
   });
 
   socket.on("close", () => socket.end());

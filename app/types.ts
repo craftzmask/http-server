@@ -46,9 +46,6 @@ export class HttpResponse {
     if (this.body) {
       lines.push("");
       lines.push("");
-      console.log("lines", lines);
-      console.log(lines.join("\r\n"), this.body);
-      console.log(this.body);
 
       return Buffer.concat([
         Buffer.from(lines.join("\r\n")),

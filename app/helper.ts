@@ -43,6 +43,9 @@ export const sendResponse = (
     const isCompressionSupported = contentEncoding?.some((encoding) =>
       compressionSchemes.includes(encoding),
     );
+    const isConnectionClose =
+      request.headers["connection"] &&
+      request.headers["connection"] === "close";
 
     const response = HttpResponse.Builder.setContentType(
       request.headers["content-type"]
@@ -53,6 +56,7 @@ export const sendResponse = (
       .setBody(
         isCompressionSupported ? Bun.gzipSync(Buffer.from(content)) : content,
       )
+      .setHeader("connection", isConnectionClose ? "close" : "open")
       .build();
 
     socket.write(response.toBuffer());
